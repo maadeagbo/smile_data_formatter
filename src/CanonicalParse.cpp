@@ -1,67 +1,68 @@
-#include "StringLib.h"
 #include "CanonicalParse.h"
-#include "ddFileIO.h"
 #include <map>
+#include "StringLib.h"
+#include "ddFileIO.h"
 
 namespace {
-std::map<cbuff<64>, unsigned> i_keys;
-std::map<cbuff<64>, unsigned> gt_keys;
-std::vector<float> time_stamps;
+// std::map<cbuff<64>, unsigned> i_keys;
+// std::map<cbuff<64>, unsigned> gt_keys;
+// std::map<unsigned, float> time_stamps_i;
+// std::map<unsigned, float> time_stamps_gt;
 }
 
 void create_canonical_verts(Args args) {
-	// check if necessary info is present
-  
+  // check if necessary info is present
+
   if (args.canon_in == "" || args.canon_gt == "") {
-    printf("Error: Need to provide both input and ground truth directories:\n"
-            "  input: %s\n  ground truth: %s\n", args.canon_in.c_str(),
-            args.canon_gt.c_str());
+    printf(
+        "Error: Need to provide both input and ground truth directories:\n"
+        "  input: %s\n  ground truth: %s\n",
+        args.canon_in.c_str(), args.canon_gt.c_str());
     return;
   }
-  
-  export_canonical(args.canon_in.c_str(), args.canon_gt.c_str(), glm::vec2(), 
+
+  export_canonical(args.canon_in.c_str(), args.canon_gt.c_str(), glm::vec2(),
                    1.f);
 }
 
 /** \brief Export data into calibrated space */
-void export_canonical_data(dd_array<glm::vec3> &input,
-                           dd_array<glm::vec3> &ground,
-                           const char *dir, const char *gdir, std::string &f_id,
+void export_canonical_data(SmileData &s_data, const char *dir, const char *gdir,
+                           const unsigned d_idx, std::string &f_id,
                            const glm::vec2 canonical_iris_pos,
                            const float canonical_iris_dist, const bool append) {
   // create new file
   f_id = f_id.substr(0, 7);
   std::string out_f_name, out_fg_name;
-  //out_f_name.format("%s/%s_canon.csv", dir, f_id.c_str());
+  // out_f_name.format("%s/%s_canon.csv", dir, f_id.c_str());
   out_f_name = dir + std::string("/") + f_id + "_canon.csv";
-  //out_fg_name.format("%s/%s_canon.csv", gdir, f_id.c_str());
+  // out_fg_name.format("%s/%s_canon.csv", gdir, f_id.c_str());
   out_fg_name = gdir + std::string("/") + f_id + "_canon.csv";
   // ddTerminal::f_post("Creating: %s", out_f_name.str());
 
   // get translation offset (Iris (M) x, Iris (M) y)
   cbuff<64> map_idx = "Iris (M) x";
-  const unsigned iris_m_idx = i_keys[map_idx]/2;
-	map_idx = "Iris (L) x";
-  const unsigned iris_l_idx = i_keys[map_idx]/2;
+  const unsigned iris_m_idx = s_data.i_keys[map_idx] / 2;
+  map_idx = "Iris (L) x";
+  const unsigned iris_l_idx = s_data.i_keys[map_idx] / 2;
   // glm::vec2 delta_pos = glm::vec2(-input[iris_l_idx]);
 
   // palpebral fissure delta and center
-	map_idx = "Palpebral fissure (RL) x";
-  const unsigned pf_r_l = gt_keys[map_idx] / 2;
-	map_idx = "Palpebral fissure (LL) x";
-  const unsigned pf_l_l = gt_keys[map_idx] / 2;
-  glm::vec2 delta_pos = glm::vec2(-ground[pf_r_l]);
+  map_idx = "Palpebral fissure (RL) x";
+  const unsigned pf_r_l = s_data.gt_keys[map_idx] / 2;
+  map_idx = "Palpebral fissure (LL) x";
+  const unsigned pf_l_l = s_data.gt_keys[map_idx] / 2;
+  glm::vec2 delta_pos = glm::vec2(-s_data.ground_data[d_idx][pf_r_l]);
   // ddTerminal::f_post("PF R L: %.3f", -delta_pos.y);
 
   // apply delta translation to all points
-  dd_array<glm::vec2> input_n(input.size());
-  dd_array<glm::vec2> ground_n(ground.size());
+  dd_array<glm::vec2> input_n(s_data.input_data[d_idx].size());
+  dd_array<glm::vec2> ground_n(s_data.ground_data[d_idx].size());
 
-  DD_FOREACH(glm::vec3, vec, input) {  // input
-    input_n[vec.i] = glm::vec2(*vec.ptr) + delta_pos;
+  DD_FOREACH(glm::vec2, vec, s_data.input_data[d_idx]) {  // input
+    input_n[vec.i] = *vec.ptr + delta_pos;
   }
-  DD_FOREACH(glm::vec3, vec, ground) {  // ground truth
-    ground_n[vec.i] = glm::vec2(*vec.ptr) + delta_pos;
+  DD_FOREACH(glm::vec2, vec, s_data.ground_data[d_idx]) {  // ground truth
+    ground_n[vec.i] = *vec.ptr + delta_pos;
   }
 
   // get rotation offset b/t lateral & medial iris
@@ -97,7 +98,7 @@ void export_canonical_data(dd_array<glm::vec3> &input,
   // apply translation to all points to move iris to canonical position
   DD_FOREACH(glm::vec2, vec, input_n) {
     // ddTerminal::f_post("#%u : %.3f, %.3f", vec.i, vec.ptr->x, vec.ptr->y);
-		*vec.ptr += canonical_iris_pos;
+    *vec.ptr += canonical_iris_pos;
   }
   DD_FOREACH(glm::vec2, vec, ground_n) {
     // ddTerminal::f_post("----> %.3f, %.3f", input_n[vec.i].x,
@@ -115,6 +116,12 @@ void export_canonical_data(dd_array<glm::vec3> &input,
 
   std::string out_str;
   std::string _sp(" ");
+
+  // record time if if exists
+  if (s_data.time_stamps_i.size() > 0) {
+    out_str = std::to_string(s_data.time_stamps_i[d_idx]) + _sp;
+  }
+
   DD_FOREACH(glm::vec2, vec, input_n) {
     out_str +=
         std::to_string(vec.ptr->x) + _sp + std::to_string(vec.ptr->y) + _sp;
@@ -131,6 +138,11 @@ void export_canonical_data(dd_array<glm::vec3> &input,
   }
 
   out_str = "";
+  // record time if if exists
+  if (s_data.time_stamps_gt.size() > 0) {
+    out_str = std::to_string(s_data.time_stamps_gt[d_idx]) + _sp;
+  }
+
   DD_FOREACH(glm::vec2, vec, ground_n) {
     out_str +=
         std::to_string(vec.ptr->x) + _sp + std::to_string(vec.ptr->y) + _sp;
@@ -156,42 +168,42 @@ void export_canonical(const char *input_dir, const char *ground_dir,
     DD_FOREACH(std::string, file, i_files) {
       const char *g_file = g_files[file.i].c_str();
       // get name of file
-      const std::string temp = file.ptr->c_str();
-      const size_t idx = temp.find_last_of("\\/");
-      const std::string f_name = temp.substr(idx + 1);
+      const std::string f_name = file.ptr->c_str();
+      const size_t idx = f_name.find_last_of("\\/");
 
-      if (file.ptr->find("_s_out.csv") != std::string::npos || 
-				  file.ptr->find("_v_out.csv") != std::string::npos) {
+      if (file.ptr->find("_s_out.csv") != std::string::npos ||
+          file.ptr->find("_v_out.csv") != std::string::npos) {
         printf("  Exporting: %s\n", f_name.c_str());
 
-        std::vector<glm::vec2> i_vec = 
-          extract_vector2(file.ptr->c_str(), VecType::INPUT);
+        // TODO: Change smile data to parameter and not return
+        SmileData s_data;
+        extract_vector2(file.ptr->c_str(), VecType::INPUT, s_data);
+        extract_vector2(g_file, VecType::OUTPUT, s_data);
 
-        // // extract contents of each file and convert to glm vectors
-        // std::vector<Eigen::VectorXd> i_vec =
-        //     extract_vector2(file.ptr->str(), VectorOut::INPUT);
-        // std::vector<Eigen::VectorXd> g_vec =
-        //     extract_vector2(g_file, VectorOut::OUTPUT);
-
-        // // loop thru lines fo each and write to output file
-        // for (size_t j = 0; j < i_vec.size(); j++) {
-        //   dd_array<glm::vec3> i_p, g_p;
-        //   get_points(i_vec, i_p, j, VectorOut::INPUT);
-        //   get_points(g_vec, g_p, j, VectorOut::OUTPUT);
-
-        //   const bool append = (j == 0) ? false : true;
-        //   export_canonical_data(i_p, g_p, input_dir, ground_dir, f_name.c_str(),
-        //                         canonical_iris_pos, canonical_iris_dist,
-        //                         append);
-        // }
+        // loop thru lines fo each and write to output file
+        for (size_t j = 0; j < s_data.input_data.size(); j++) {
+          const bool append = (j == 0) ? false : true;
+          export_canonical_data(s_data, input_dir, ground_dir, j,
+                                f_name.substr(idx + 1), canonical_iris_pos,
+                                canonical_iris_dist, append);
+        }
         // ddTerminal::post("---> Done.");
       }
     }
   }
 }
 
-std::vector<glm::vec2> extract_vector2(const char *in_file, const VecType type) {
-  std::vector<glm::vec2> out_vec;
+void extract_vector2(const char *in_file, const VecType type,
+                     SmileData &sdata) {
+  // set up handles
+  std::vector<dd_array<glm::vec2>> &out_vec =
+      (type == VecType::INPUT) ? sdata.input_data : sdata.ground_data;
+  std::map<cbuff<64>, unsigned> &out_keys =
+      (type == VecType::INPUT) ? sdata.i_keys : sdata.gt_keys;
+  std::vector<float> &t_stamp =
+      (type == VecType::INPUT) ? sdata.time_stamps_i : sdata.time_stamps_gt;
+
+  // file/directory reader
   ddFileIO<> vec_io;
 
   bool success = vec_io.open(in_file, ddIOflag::READ);
@@ -203,65 +215,52 @@ std::vector<glm::vec2> extract_vector2(const char *in_file, const VecType type) 
     const std::string _f = in_file;
     bool time_flag = false;
 
-    switch (type) {
-      case VecType::INPUT:
-        // get input keys
-        indices = StrSpace::tokenize1024<64>(line, ",");
-        if (i_keys.size() == 0) {
-          DD_FOREACH(cbuff<64>, _key, indices) {
-            // set offset if time column is present (must be 1st column)
-            if (_key.ptr->contains("time")) {
-							time_flag = true;
-            } else {
-              i_keys[*_key.ptr] = time_flag ? _key.i - 1 : _key.i;
-            }
-          }
-        }
-        // skip to next line in file
-        line = vec_io.readNextLine();
-        break;
-      case VecType::OUTPUT:
-        // get output keys
-        indices = StrSpace::tokenize1024<64>(line, ",");
-        if (gt_keys.size() == 0) {
-          DD_FOREACH(cbuff<64>, _key, indices) {
-            if (_key.ptr->contains("time")) {
-							time_flag = true;
-            } else {
-              gt_keys[*_key.ptr] = time_flag ? _key.i - 1 : _key.i;
-            }
-          }
-        }
-        // skip to next line in file
-        line = vec_io.readNextLine();
-        break;
+    indices = StrSpace::tokenize1024<64>(line, ",");
+    DD_FOREACH(cbuff<64>, _key, indices) {
+      // set offset if time column is present (must be 1st column)
+      if (_key.ptr->contains("time")) {
+        time_flag = true;
+      } else {
+        out_keys[*_key.ptr] = time_flag ? _key.i - 1 : _key.i;
+      }
     }
-    const unsigned vec_size = time_flag ? indices.size() - 1 : indices.size();
+    line = vec_io.readNextLine();
 
-    // ddTerminal::f_post("Creating new input vectors(%lu)...", vec_size);
+    const unsigned vec_size =
+        time_flag ? (indices.size() - 1) / 2 : (indices.size()) / 2;
+
+    printf("    Creating new input vectors(%lu)...\n", vec_size);
     // populate vector
-    unsigned idx = 0;
+    unsigned r_idx = 0;
     while (line) {
-      printf("%s\n", line);
-      // out_vec.push_back(Eigen::VectorXd::Zero(vec_size));
+      // printf("%s\n", line);
+      out_vec.push_back(dd_array<glm::vec2>(vec_size));
 
-      // // loop thru columns per row
-      // unsigned r_idx = 0;
-      // const char *curr_row = line;
-      // while (*curr_row) {
-      //   char *nxt_dbl = nullptr;
-      //   // printf("%s\n", curr_row);
-      //   out_vec[idx](r_idx) = std::strtod(curr_row, &nxt_dbl);
-      //   curr_row = nxt_dbl;
-
-      //   r_idx++;
-      // }
+      // loop thru columns per row
+      unsigned c_idx = 0;
+      bool time_recorded = false;
+      const char *curr_row = line;
+      while (*curr_row) {
+        char *nxt_dbl = nullptr;
+        // printf("%s\n", curr_row);
+        if (time_flag && !time_recorded) {
+          // get time info
+          t_stamp.push_back(std::strtod(curr_row, &nxt_dbl));
+          time_recorded = true;
+        } else {
+          // get x & y axis
+          out_vec[r_idx][c_idx].x = std::strtod(curr_row, &nxt_dbl);
+          curr_row = nxt_dbl;
+          POW2_VERIFY_MSG(nxt_dbl != nullptr, "Y axis error: column %u", c_idx);
+          out_vec[r_idx][c_idx].y = std::strtod(curr_row, &nxt_dbl);
+          c_idx++;
+        }
+        curr_row = nxt_dbl;
+      }
       // // std::cout << out_vec[idx] << "\n\n";
 
       line = vec_io.readNextLine();
-      idx++;
+      r_idx++;
     }
   }
-
-  return out_vec;
 }

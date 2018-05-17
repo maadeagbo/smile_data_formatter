@@ -63,8 +63,9 @@ include_directories(${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/glm)
 
 # use the file(GLOB...) or file(GLOB_RECURSE...) to grab wildcard src files
 file(GLOB_RECURSE SOURCES 	"${CMAKE_SOURCE_DIR}/src/*.cpp")
+file(GLOB_RECURSE INCLUDES 	"${CMAKE_SOURCE_DIR}/include/*.h")
 
-add_executable(fk_data ${SOURCES})
+add_executable(fk_data ${SOURCES} ${INCLUDES})
 
 # set visual studio startup project
 set_property(DIRECTORY ${CMAKE_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT fk_data)

@@ -18,6 +18,7 @@ int main(int argc, char const *argv[]) {
 	// leave if help screen
 	if(args.help) return 0;
 	
+	// create csvs of original data split by query lists
 	create_formatted_csvs(args);
 
 	// convert to canonical space	
