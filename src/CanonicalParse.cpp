@@ -3,13 +3,6 @@
 #include "StringLib.h"
 #include "ddFileIO.h"
 
-namespace {
-// std::map<cbuff<64>, unsigned> i_keys;
-// std::map<cbuff<64>, unsigned> gt_keys;
-// std::map<unsigned, float> time_stamps_i;
-// std::map<unsigned, float> time_stamps_gt;
-}
-
 void create_canonical_verts(Args args) {
   // check if necessary info is present
 
@@ -33,26 +26,16 @@ void export_canonical_data(SmileData &s_data, const char *dir, const char *gdir,
   // create new file
   f_id = f_id.substr(0, 7);
   std::string out_f_name, out_fg_name;
-  // out_f_name.format("%s/%s_canon.csv", dir, f_id.c_str());
   out_f_name = dir + std::string("/") + f_id + "_canon.csv";
-  // out_fg_name.format("%s/%s_canon.csv", gdir, f_id.c_str());
   out_fg_name = gdir + std::string("/") + f_id + "_canon.csv";
-  // ddTerminal::f_post("Creating: %s", out_f_name.str());
 
-  // get translation offset (Iris (M) x, Iris (M) y)
-  cbuff<64> map_idx = "Iris (M) x";
-  const unsigned iris_m_idx = s_data.i_keys[map_idx] / 2;
-  map_idx = "Iris (L) x";
-  const unsigned iris_l_idx = s_data.i_keys[map_idx] / 2;
-  // glm::vec2 delta_pos = glm::vec2(-input[iris_l_idx]);
-
-  // palpebral fissure delta and center
-  map_idx = "Palpebral fissure (RL) x";
+  // get translation offset
+  cbuff<64> map_idx = "Lateral canthus (R) x";
   const unsigned pf_r_l = s_data.gt_keys[map_idx] / 2;
-  map_idx = "Palpebral fissure (LL) x";
+  map_idx = "Lateral canthus (L) x";
   const unsigned pf_l_l = s_data.gt_keys[map_idx] / 2;
+  
   glm::vec2 delta_pos = glm::vec2(-s_data.ground_data[d_idx][pf_r_l]);
-  // ddTerminal::f_post("PF R L: %.3f", -delta_pos.y);
 
   // apply delta translation to all points
   dd_array<glm::vec2> input_n(s_data.input_data[d_idx].size());
@@ -97,12 +80,9 @@ void export_canonical_data(SmileData &s_data, const char *dir, const char *gdir,
 
   // apply translation to all points to move iris to canonical position
   DD_FOREACH(glm::vec2, vec, input_n) {
-    // ddTerminal::f_post("#%u : %.3f, %.3f", vec.i, vec.ptr->x, vec.ptr->y);
     *vec.ptr += canonical_iris_pos;
   }
   DD_FOREACH(glm::vec2, vec, ground_n) {
-    // ddTerminal::f_post("----> %.3f, %.3f", input_n[vec.i].x,
-    // input_n[vec.i].y);
     *vec.ptr += canonical_iris_pos;
   }
 
@@ -128,7 +108,6 @@ void export_canonical_data(SmileData &s_data, const char *dir, const char *gdir,
   }
   out_str.pop_back();
   out_str += "\n";
-  // ddTerminal::post(out_str.c_str());
   i_out.writeLine(out_str.c_str());
 
   if (append) {
@@ -183,8 +162,11 @@ void export_canonical(const char *input_dir, const char *ground_dir,
         // loop thru lines fo each and write to output file
         for (size_t j = 0; j < s_data.input_data.size(); j++) {
           const bool append = (j == 0) ? false : true;
+
+          std::string file_substr = f_name.substr(idx + 1);
+
           export_canonical_data(s_data, input_dir, ground_dir, j,
-                                f_name.substr(idx + 1), canonical_iris_pos,
+                                file_substr, canonical_iris_pos,
                                 canonical_iris_dist, append);
         }
         // ddTerminal::post("---> Done.");
@@ -229,7 +211,7 @@ void extract_vector2(const char *in_file, const VecType type,
     const unsigned vec_size =
         time_flag ? (indices.size() - 1) / 2 : (indices.size()) / 2;
 
-    printf("    Creating new input vectors(%lu)...\n", vec_size);
+    printf("    Creating new input vectors(%u)...\n", (unsigned)vec_size);
     // populate vector
     unsigned r_idx = 0;
     while (line) {

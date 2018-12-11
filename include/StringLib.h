@@ -10,7 +10,7 @@
 #include "Container.h"
 
 /** \brief Hashes const char* strings */
-static size_t getCharHash(const char* s) {
+inline size_t getCharHash(const char* s) {
   size_t h = 5381;
   int c;
   while ((c = *s++)) h = ((h << 5) + h) + c;
